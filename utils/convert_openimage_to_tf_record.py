@@ -9,17 +9,17 @@ from sets import Set
 
 flags = tf.app.flags
 flags.DEFINE_string('output_tfrecord', 'output.tfrecord', 'Path to output TFRecord')
+flags.DEFINE_string('output_label_map', 'output.pbtxt', 'Path to output label map')
 flags.DEFINE_string('input_images_dir', 'input', 'Path to input images')
 
 FLAGS = flags.FLAGS
 
-LABELS_DICT = {
+FILTER = {
     "Window" : 1,
     "Door" : 2,
-    "Billboard" : 3
+    "Billboard" : 3,
 }
 
-FILTER = {'test' : 1 }
 
 def create_tf_example(example):
     filename = example['path'].encode() # Filename of the image. Empty if image is not from file
@@ -49,7 +49,7 @@ def create_tf_example(example):
     classes = [] # List of integer class id of bounding box (1 per box)
 
     for box in example['annotations']:
-	if not box['class'] in FILTER:
+	if not FILTER.get(box['class'], None):
             continue
 
         #if box['occluded'] is False:
@@ -83,11 +83,21 @@ def create_tf_example(example):
 
 
 def main(_):
+
     writer = tf.python_io.TFRecordWriter(FLAGS.output_tfrecord)
 
     input_dir = FLAGS.input_images_dir
 
     print("output file: {}, input dir: {}".format(FLAGS.output_tfrecord, input_dir))
+
+    class_descriptions = pd.read_csv('class-descriptions-boxable.csv', names=['key', 'name'])
+    print(class_descriptions.head())
+
+    class_descriptions = class_descriptions[class_descriptions['name'].isin(list(FILTER.iterkeys()))]
+    print(class_descriptions)
+    FILTER_KEYS = {}
+    for i, row in class_descriptions.iterrows():
+        FILTER_KEYS[row['key']] = row['name']
 
 # ImageID,Source,LabelName,Confidence,XMin,XMax,YMin,YMax,IsOccluded,IsTruncated,IsGroupOf,IsDepiction,IsInside
 # 000002b66c9c498e,xclick,/m/01g317,1,0.012500,0.195312,0.148438,0.587500,0,1,0,0,0
@@ -99,9 +109,6 @@ def main(_):
         filter_ids.add(filename)
 
     bboxes_pd = bboxes_pd[bboxes_pd['ImageID'].isin(filter_ids)]
-
-#    print("!!!!!!", len(bboxes_pd))
-#    print("!!!!!!", len(filter_ids))
 
     for img in glob.glob(os.path.join(input_dir, '*.jpg')):
         try:
@@ -115,7 +122,11 @@ def main(_):
 
             for index, row in annotations.iterrows():
                 a = {}
-                a['class'] = 'test'
+
+                label_name = FILTER_KEYS.get(row['LabelName'], None)
+                if not label_name:
+                    continue
+                a['class'] = label_name
                 a['xmin'] = row['XMin']
                 a['ymin'] = row['YMin']
                 a['x_width'] = row['XMax'] - row['XMin']

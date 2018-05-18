@@ -21,16 +21,24 @@ FILTER = {
 }
 
 
-def create_tf_example(example):
+def create_tf_example(example, normalize_size=True):
     filename = example['path'].encode() # Filename of the image. Empty if image is not from file
+
+    im = Image.open(example['path'])
+    print im.size
+
+    if normalize_size:
+        im = im.resize((800, 600), Image.ANTIALIAS)
+        im_path = os.path.join('800x600', example['path'])
+        im.save(im_path, "JPEG")
+        example['path'] = im_path
+
+    width = im.size[0]
+    height = im.size[1]
 
     with tf.gfile.GFile(example['path'], 'rb') as fid:
         encoded_image_data = fid.read()
 
-    im = Image.open(example['path'])
-    print im.size
-    width = im.size[0]
-    height = im.size[1]
 
     xmin='xmin'
     ymin='ymin'
